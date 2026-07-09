@@ -15,6 +15,12 @@ const serviceKeyField = "service_key"
 // No cookies. All routes except none — every route requires the key.
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Render/platform probes use GET /v1/health without a service key.
+		if r.URL.Path == "/v1/health" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		expected := strings.TrimSpace(os.Getenv("EMAIL_SERVICE_KEY"))
 		if expected == "" {
 			deny(w)

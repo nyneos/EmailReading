@@ -32,10 +32,17 @@ func requirePOST(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-	if !requirePOST(w, r) {
-		return
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodPost:
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		writeJSON(w, map[string]string{"status": "ok", "service": "email-service"})
+	default:
+		jsonErr(w, "method not allowed — use GET or POST", http.StatusMethodNotAllowed)
 	}
-	writeJSON(w, map[string]string{"status": "ok", "service": "email-service"})
 }
 
 func parseHandler(w http.ResponseWriter, r *http.Request) {
