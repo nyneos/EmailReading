@@ -1,4 +1,4 @@
-# Binaries
+# Go binaries
 *.exe
 *.exe~
 *.dll
@@ -6,8 +6,11 @@
 *.dylib
 *.test
 *.out
+coverage.*
+*.coverprofile
+profile.cov
 
-# Go
+# Go workspace
 go.work
 go.work.sum
 vendor/
@@ -15,7 +18,6 @@ vendor/
 # Secrets & local config (not pushed)
 .env
 .env.*
-!.env.*.sample
 
 # Deploy docs (kept local only)
 DEPLOY.md
