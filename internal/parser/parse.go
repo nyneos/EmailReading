@@ -123,15 +123,45 @@ func splitAddrs(s string) []string {
 	if s == "" {
 		return nil
 	}
-	addrs, err := mail.ParseAddressList(s)
+	// Outlook/Exchange often uses semicolons; net/mail expects commas.
+	normalized := strings.ReplaceAll(s, ";", ",")
+	addrs, err := mail.ParseAddressList(normalized)
 	if err != nil {
-		return []string{s}
+		return parseAddrFragments(s)
 	}
 	out := make([]string, 0, len(addrs))
 	for _, a := range addrs {
 		if a.Address != "" {
 			out = append(out, a.Address)
 		}
+	}
+	return out
+}
+
+func parseAddrFragments(s string) []string {
+	parts := strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == ';'
+	})
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if addrs, err := mail.ParseAddressList(p); err == nil {
+			for _, a := range addrs {
+				if a.Address != "" {
+					out = append(out, a.Address)
+				}
+			}
+			continue
+		}
+		if addr, err := mail.ParseAddress(p); err == nil && addr.Address != "" {
+			out = append(out, addr.Address)
+		}
+	}
+	if len(out) == 0 {
+		return []string{s}
 	}
 	return out
 }
