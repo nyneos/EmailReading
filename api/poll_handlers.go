@@ -22,6 +22,7 @@ func registerPollHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/imap/poll-folder", imapPollFolderHandler)
 	mux.HandleFunc("/v1/graph/test", graphTestHandler)
 	mux.HandleFunc("/v1/graph/poll-page", graphPollPageHandler)
+	registerOAuthHandlers(mux)
 }
 
 func imapTestHandler(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +228,8 @@ func imapConfigFromModel(c model.IMAPConfig, mailbox string) (imapmail.Config, e
 		Port:        port,
 		Username:    c.Username,
 		Password:    c.Password,
+		AuthMode:    c.AuthMode,
+		AccessToken: c.AccessToken,
 		UseTLS:      c.UseTLS,
 		InboxFolder: c.InboxFolder,
 		SentFolder:  c.SentFolder,

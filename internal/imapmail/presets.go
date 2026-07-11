@@ -24,6 +24,8 @@ type Config struct {
 	Port        int    `json:"port"`
 	Username    string `json:"username"`
 	Password    string `json:"password,omitempty"`
+	AuthMode    string `json:"auth_mode,omitempty"`    // password | oauth
+	AccessToken string `json:"access_token,omitempty"` // OAuth2 bearer token for XOAUTH2
 	UseTLS      bool   `json:"use_tls"`
 	InboxFolder string `json:"inbox_folder"`
 	SentFolder  string `json:"sent_folder"`
@@ -118,6 +120,12 @@ func (c *Config) Resolve(mailboxAddress string) error {
 
 	if c.Username == "" {
 		return fmt.Errorf("imap username is required")
+	}
+	if strings.EqualFold(strings.TrimSpace(c.AuthMode), "oauth") {
+		if strings.TrimSpace(c.AccessToken) == "" {
+			return fmt.Errorf("imap oauth access token is required")
+		}
+		return nil
 	}
 	if c.Password == "" {
 		return fmt.Errorf("imap password (app password) is required")
