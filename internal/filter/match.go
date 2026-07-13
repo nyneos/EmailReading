@@ -7,13 +7,13 @@ import (
 
 // Filters mirrors inbox_config.filters_json from the main API.
 type Filters struct {
-	Senders          []string `json:"senders"`
-	Recipients       []string `json:"recipients"`
-	Domains          []string `json:"domains"`
-	Subjects         []string `json:"subjects"`
-	ExcludeSenders   []string `json:"exclude_senders"`
-	HasAttachments   *bool    `json:"has_attachments"`
-	AttachmentTypes  []string `json:"attachment_types"`
+	Senders         []string `json:"senders"`
+	Recipients      []string `json:"recipients"`
+	Domains         []string `json:"domains"`
+	Subjects        []string `json:"subjects"`
+	ExcludeSenders  []string `json:"exclude_senders"`
+	HasAttachments  *bool    `json:"has_attachments"`
+	AttachmentTypes []string `json:"attachment_types"`
 }
 
 type MatchInput struct {
@@ -26,7 +26,6 @@ type MatchInput struct {
 
 func Match(f Filters, in MatchInput) bool {
 	from := strings.ToLower(strings.TrimSpace(in.From))
-	subject := strings.TrimSpace(in.Subject)
 
 	for _, pat := range f.ExcludeSenders {
 		if globMatch(strings.ToLower(pat), from) {
@@ -34,19 +33,42 @@ func Match(f Filters, in MatchInput) bool {
 		}
 	}
 
+	if !filtersConfigured(f) {
+		return true
+	}
+
+	return anyCategoryMatches(f, in)
+}
+
+func filtersConfigured(f Filters) bool {
+	if len(f.Senders) > 0 || len(f.Recipients) > 0 || len(f.Domains) > 0 ||
+		len(f.Subjects) > 0 || len(f.AttachmentTypes) > 0 || f.HasAttachments != nil {
+		return true
+	}
+	return false
+}
+
+func anyCategoryMatches(f Filters, in MatchInput) bool {
+	from := strings.ToLower(strings.TrimSpace(in.From))
+	subject := strings.TrimSpace(in.Subject)
+
+	var matches []bool
+
 	if len(f.Senders) > 0 {
-		if !anyGlobMatch(f.Senders, from) {
-			return false
-		}
+		matches = append(matches, anyGlobMatch(f.Senders, from))
 	}
-
 	if len(f.Domains) > 0 {
-		domain := extractDomain(from)
-		if !anyGlobMatch(f.Domains, domain) {
-			return false
+		domainMatch := anyGlobMatch(f.Domains, extractDomain(from))
+		if !domainMatch {
+			for _, to := range in.To {
+				if anyGlobMatch(f.Domains, extractDomain(strings.ToLower(strings.TrimSpace(to)))) {
+					domainMatch = true
+					break
+				}
+			}
 		}
+		matches = append(matches, domainMatch)
 	}
-
 	if len(f.Recipients) > 0 {
 		matched := false
 		for _, to := range in.To {
@@ -55,30 +77,24 @@ func Match(f Filters, in MatchInput) bool {
 				break
 			}
 		}
-		if !matched {
-			return false
-		}
+		matches = append(matches, matched)
 	}
-
 	if len(f.Subjects) > 0 {
-		if !anyGlobMatch(f.Subjects, subject) {
-			return false
-		}
+		matches = append(matches, anyGlobMatch(f.Subjects, subject))
 	}
-
 	if f.HasAttachments != nil {
-		if *f.HasAttachments != in.HasAttachments {
-			return false
-		}
+		matches = append(matches, *f.HasAttachments == in.HasAttachments)
 	}
-
 	if len(f.AttachmentTypes) > 0 && in.HasAttachments {
-		if !attachmentTypeMatch(f.AttachmentTypes, in.AttachmentNames) {
-			return false
-		}
+		matches = append(matches, attachmentTypeMatch(f.AttachmentTypes, in.AttachmentNames))
 	}
 
-	return true
+	for _, m := range matches {
+		if m {
+			return true
+		}
+	}
+	return false
 }
 
 func anyGlobMatch(patterns []string, value string) bool {
