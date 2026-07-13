@@ -170,6 +170,10 @@ func extractHandler(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, "invalid parsed json", http.StatusBadRequest)
 		return
 	}
+	if err := extract.ValidateBody(parsed); err != nil {
+		jsonErr(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	intent, meta, confidence := extract.Run(req.Module, parsed)
 	resp := model.ExtractResponse{

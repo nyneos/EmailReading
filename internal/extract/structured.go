@@ -9,31 +9,58 @@ import (
 )
 
 var (
-	reHTMLTable   = regexp.MustCompile(`(?is)<table[^>]*>(.*?)</table>`)
-	reHTMLRow     = regexp.MustCompile(`(?is)<tr[^>]*>(.*?)</tr>`)
-	reHTMLCell    = regexp.MustCompile(`(?is)<t[dh][^>]*>(.*?)</t[dh]>`)
-	reHTMLTag     = regexp.MustCompile(`(?is)<[^>]+>`)
-	reHTMLBreak   = regexp.MustCompile(`(?is)<br\s*/?>`)
-	reKVLine      = regexp.MustCompile(`^\s*([A-Za-z][A-Za-z0-9 #/()._-]{0,60}?)\s*[:：\-–—]\s+(.+?)\s*$`)
-	reBulletLine  = regexp.MustCompile(`^\s*[-•*]\s+(.+?)\s*$`)
+	reHTMLTable    = regexp.MustCompile(`(?is)<table[^>]*>(.*?)</table>`)
+	reHTMLRow      = regexp.MustCompile(`(?is)<tr[^>]*>(.*?)</tr>`)
+	reHTMLCell     = regexp.MustCompile(`(?is)<t[dh][^>]*>(.*?)</t[dh]>`)
+	reHTMLTag      = regexp.MustCompile(`(?is)<[^>]+>`)
+	reHTMLBreak    = regexp.MustCompile(`(?is)<br\s*/?>`)
+	reKVLine       = regexp.MustCompile(`^\s*([A-Za-z][A-Za-z0-9 #/()._-]{0,60}?)\s*[:：\-–—]\s+(.+?)\s*$`)
+	reBulletLine   = regexp.MustCompile(`^\s*[-•*]\s+(.+?)\s*$`)
 	reNumberedLine = regexp.MustCompile(`^\s*\d+[.)]\s+(.+?)\s*$`)
 )
 
-// MaxExtractBodyRunes caps text passed into structured extraction (AI/heuristics).
+// MaxExtractBodyRunes is the largest body processed as one complete unit.
+// Larger bodies must be rejected before extraction; they are never truncated.
 const MaxExtractBodyRunes = 512000
 
 // MinExtractBodyRunes rejects empty or trivial bodies before extraction.
 const MinExtractBodyRunes = 20
 
+func extractionText(parsed model.ParsedEmail) string {
+	text := strings.TrimSpace(parsed.Body.TextPlain)
+	if text == "" {
+		text = stripHTMLBasic(strings.TrimSpace(parsed.Body.TextHTML))
+	}
+	return text
+}
+
+// ValidateBody rejects unsupported lengths before extraction starts, preventing
+// partial metadata from being returned or persisted.
+func ValidateBody(parsed model.ParsedEmail) error {
+	bodyRunes := len([]rune(extractionText(parsed)))
+	if bodyRunes < MinExtractBodyRunes {
+		return fmt.Errorf(
+			"email body too short for extraction (%d chars, minimum %d)",
+			bodyRunes,
+			MinExtractBodyRunes,
+		)
+	}
+	if bodyRunes > MaxExtractBodyRunes {
+		return fmt.Errorf(
+			"email body too large for complete extraction (%d chars, maximum %d)",
+			bodyRunes,
+			MaxExtractBodyRunes,
+		)
+	}
+	return nil
+}
+
 // Run produces structured metadata from a parsed email.
 // Output always includes intent + envelope fields; adds tables and key_values when detected.
 func Run(module string, parsed model.ParsedEmail) (intent string, meta map[string]interface{}, confidence float64) {
 	intent = intentForModule(module)
-	text := strings.TrimSpace(parsed.Body.TextPlain)
+	text := extractionText(parsed)
 	html := strings.TrimSpace(parsed.Body.TextHTML)
-	if text == "" && html != "" {
-		text = stripHTMLBasic(html)
-	}
 
 	bodyRunes := len([]rune(text))
 	meta = map[string]interface{}{
@@ -49,12 +76,6 @@ func Run(module string, parsed model.ParsedEmail) (intent string, meta map[strin
 		meta["extract_skipped"] = "body_too_short"
 		return intent, meta, 0
 	}
-	if bodyRunes > MaxExtractBodyRunes {
-		text = string([]rune(text)[:MaxExtractBodyRunes])
-		meta["extract_truncated"] = true
-		meta["body_char_len"] = MaxExtractBodyRunes
-	}
-
 	preview := text
 	if len(preview) > 2000 {
 		preview = string([]rune(preview)[:2000])
@@ -123,7 +144,7 @@ func extractHTMLTables(html string) []map[string]interface{} {
 		return nil
 	}
 	var out []map[string]interface{}
-	for i, tableMatch := range reHTMLTable.FindAllStringSubmatch(html, 10) {
+	for i, tableMatch := range reHTMLTable.FindAllStringSubmatch(html, -1) {
 		rowsRaw := reHTMLRow.FindAllStringSubmatch(tableMatch[1], -1)
 		if len(rowsRaw) == 0 {
 			continue
@@ -316,9 +337,6 @@ func extractOrderedList(text string) []string {
 		if m := reNumberedLine.FindStringSubmatch(line); len(m) == 2 {
 			items = append(items, strings.TrimSpace(m[1]))
 		}
-	}
-	if len(items) > 20 {
-		return items[:20]
 	}
 	return items
 }
