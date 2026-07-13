@@ -19,6 +19,12 @@ var (
 	reNumberedLine = regexp.MustCompile(`^\s*\d+[.)]\s+(.+?)\s*$`)
 )
 
+// MaxExtractBodyRunes caps text passed into structured extraction (AI/heuristics).
+const MaxExtractBodyRunes = 512000
+
+// MinExtractBodyRunes rejects empty or trivial bodies before extraction.
+const MinExtractBodyRunes = 20
+
 // Run produces structured metadata from a parsed email.
 // Output always includes intent + envelope fields; adds tables and key_values when detected.
 func Run(module string, parsed model.ParsedEmail) (intent string, meta map[string]interface{}, confidence float64) {
@@ -29,20 +35,31 @@ func Run(module string, parsed model.ParsedEmail) (intent string, meta map[strin
 		text = stripHTMLBasic(html)
 	}
 
-	preview := text
-	if len(preview) > 500 {
-		preview = preview[:500]
-	}
-
+	bodyRunes := len([]rune(text))
 	meta = map[string]interface{}{
 		"intent":         intent,
 		"subject":        parsed.Envelope.Subject,
 		"from":           parsed.Envelope.From,
 		"to":             parsed.Envelope.To,
 		"date":           parsed.Envelope.Date,
-		"body_preview":   preview,
+		"body_char_len":  bodyRunes,
 		"attachment_cnt": len(parsed.Attachments),
 	}
+	if bodyRunes < MinExtractBodyRunes {
+		meta["extract_skipped"] = "body_too_short"
+		return intent, meta, 0
+	}
+	if bodyRunes > MaxExtractBodyRunes {
+		text = string([]rune(text)[:MaxExtractBodyRunes])
+		meta["extract_truncated"] = true
+		meta["body_char_len"] = MaxExtractBodyRunes
+	}
+
+	preview := text
+	if len(preview) > 2000 {
+		preview = string([]rune(preview)[:2000])
+	}
+	meta["body_preview"] = preview
 
 	tables := extractHTMLTables(html)
 	if len(tables) == 0 && text != "" {

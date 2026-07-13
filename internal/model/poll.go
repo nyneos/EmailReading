@@ -77,3 +77,39 @@ type GraphTestRequest struct {
 	ServiceKey string      `json:"service_key"`
 	Graph      GraphConfig `json:"graph"`
 }
+
+type GmailDWDConfig struct {
+	TenantLabel         string `json:"tenant_label"`
+	ServiceAccountEmail string `json:"service_account_email"`
+	ClientID            string `json:"client_id"`
+	PrivateKey          string `json:"private_key"`
+}
+
+type GmailDWDTestRequest struct {
+	ServiceKey     string         `json:"service_key"`
+	MailboxAddress string         `json:"mailbox_address"`
+	GmailDWD       GmailDWDConfig `json:"gmail_dwd"`
+}
+
+type GmailDWDPollPageRequest struct {
+	ServiceKey     string         `json:"service_key"`
+	MailboxAddress string         `json:"mailbox_address"`
+	InboxID        string         `json:"inbox_id"`
+	SentFolder     bool           `json:"sent_folder"`
+	Since          string         `json:"since"`
+	Batch          int            `json:"batch"`
+	GmailDWD       GmailDWDConfig `json:"gmail_dwd"`
+}
+
+type GmailDWDPollPageResponse struct {
+	Initialized bool                   `json:"initialized"`
+	NewSince    string                 `json:"new_since"`
+	Fetched     int                    `json:"fetched"`
+	Messages    []GmailDWDPolledMessage `json:"messages"`
+}
+
+type GmailDWDPolledMessage struct {
+	GraphMessageID string      `json:"graph_message_id"`
+	CursorTime     string      `json:"cursor_time"`
+	Parsed         ParsedEmail `json:"parsed"`
+}

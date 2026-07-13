@@ -22,6 +22,7 @@ func registerPollHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/imap/poll-folder", imapPollFolderHandler)
 	mux.HandleFunc("/v1/graph/test", graphTestHandler)
 	mux.HandleFunc("/v1/graph/poll-page", graphPollPageHandler)
+	registerGmailDWDHandlers(mux)
 	registerOAuthHandlers(mux)
 }
 
