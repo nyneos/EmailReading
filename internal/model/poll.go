@@ -102,9 +102,9 @@ type GmailDWDPollPageRequest struct {
 }
 
 type GmailDWDPollPageResponse struct {
-	Initialized bool                   `json:"initialized"`
-	NewSince    string                 `json:"new_since"`
-	Fetched     int                    `json:"fetched"`
+	Initialized bool                    `json:"initialized"`
+	NewSince    string                  `json:"new_since"`
+	Fetched     int                     `json:"fetched"`
 	Messages    []GmailDWDPolledMessage `json:"messages"`
 }
 
