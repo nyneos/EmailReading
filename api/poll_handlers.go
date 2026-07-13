@@ -77,8 +77,14 @@ func imapPollFolderHandler(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		logger.Info("imap/poll-folder: init mailbox=%s folder=%s uid=%d", req.MailboxAddress, folder, maxUID)
-		writeJSON(w, model.IMAPPollFolderResponse{Initialized: true, NewLastUID: maxUID})
+		initUID := maxUID
+		if maxUID > 0 {
+			// Leave cursor one behind max so the next poll ingests the newest message
+			// instead of skipping it when initialization races with a just-sent mail.
+			initUID = maxUID - 1
+		}
+		logger.Info("imap/poll-folder: init mailbox=%s folder=%s uid=%d (max=%d)", req.MailboxAddress, folder, initUID, maxUID)
+		writeJSON(w, model.IMAPPollFolderResponse{Initialized: true, NewLastUID: initUID})
 		return
 	}
 
