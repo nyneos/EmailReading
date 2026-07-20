@@ -67,11 +67,11 @@ func Put(ctx context.Context, req model.StoragePutRequest) (*model.StoragePutRes
 		}
 	}
 
-	filename := buildOutputFilename(req.OutputNamePrefix, req.AppendDatetime, req.FileExt, time.Now())
 	contentType := strings.TrimSpace(req.ContentType)
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
+	filename := buildOutputFilename(req.OutputNamePrefix, req.AppendDatetime, resolveFileExt(req.FileExt, contentType), time.Now())
 
 	var location, s3Key string
 	switch dt {
@@ -121,6 +121,29 @@ func normalizeExt(v string) string {
 		v = "." + v
 	}
 	return v
+}
+
+// resolveFileExt picks extension from explicit file_ext, else infers from Content-Type (JSON mappings → .json).
+func resolveFileExt(fileExt, contentType string) string {
+	ext := normalizeExt(fileExt)
+	if ext != "" && ext != ".bin" {
+		return ext
+	}
+	ct := strings.ToLower(strings.TrimSpace(contentType))
+	switch {
+	case strings.Contains(ct, "json"):
+		return ".json"
+	case strings.Contains(ct, "xml"):
+		return ".xml"
+	case strings.Contains(ct, "csv"):
+		return ".csv"
+	case strings.Contains(ct, "text/plain"):
+		return ".txt"
+	}
+	if ext != "" {
+		return ext
+	}
+	return ".json"
 }
 
 func sanitizeFilenameBase(name string) string {

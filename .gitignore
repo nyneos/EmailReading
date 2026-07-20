@@ -25,3 +25,9 @@ DEPLOY.md
 # Editor
 .idea/
 .vscode/
+.DS_Store
+
+# Local destination test outputs
+transformed/
+sftp-data/
+

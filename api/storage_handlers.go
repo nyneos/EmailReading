@@ -10,10 +10,6 @@ import (
 	"EmailService/internal/storage"
 )
 
-func registerStorageHandlers(mux *http.ServeMux) {
-	mux.HandleFunc("/v1/storage/put", storagePutHandler)
-}
-
 func storagePutHandler(w http.ResponseWriter, r *http.Request) {
 	if !requirePOST(w, r) {
 		return
