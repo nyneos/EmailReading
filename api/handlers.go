@@ -21,6 +21,7 @@ func RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/ses/rules/sync", sesSyncHandler)
 	mux.HandleFunc("/v1/ses/rules/delete", sesDeleteRuleHandler)
 	registerPollHandlers(mux)
+	registerStorageHandlers(mux)
 }
 
 func requirePOST(w http.ResponseWriter, r *http.Request) bool {
