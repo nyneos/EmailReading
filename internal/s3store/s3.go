@@ -190,5 +190,5 @@ func ListNewRawKeys(ctx context.Context, afterKey string, limit int32) ([]string
 	return keys, nil
 }
 
-func RawPrefix() string  { return rawPrefix() }
-func Bucket() string     { return bucket() }
+func RawPrefix() string { return rawPrefix() }
+func Bucket() string    { return bucket() }
