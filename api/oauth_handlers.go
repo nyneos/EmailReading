@@ -15,6 +15,7 @@ import (
 	"EmailService/internal/model"
 	"EmailService/internal/oauthmail"
 	"EmailService/internal/parser"
+	"EmailService/internal/pollcursor"
 	"EmailService/internal/s3store"
 )
 
@@ -121,12 +122,12 @@ func oauthPollPageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	sinceStr := strings.TrimSpace(req.Since)
 	if sinceStr == "" {
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := pollcursor.FormatStored(time.Now().UTC())
 		logger.Info("oauth/poll-page: init mailbox=%s sent=%v since=%s", req.MailboxAddress, req.SentFolder, now)
 		writeJSON(w, model.OAuthPollPageResponse{Initialized: true, NewSince: now})
 		return
 	}
-	since, err := time.Parse(time.RFC3339, sinceStr)
+	since, err := pollcursor.ParseStored(sinceStr)
 	if err != nil {
 		jsonErr(w, "invalid since timestamp", http.StatusBadRequest)
 		return
@@ -185,9 +186,15 @@ func pollGoogleOAuthPage(ctx context.Context, req model.OAuthPollPageRequest, si
 	if err != nil {
 		return model.OAuthPollPageResponse{}, err
 	}
-	resp := model.OAuthPollPageResponse{NewSince: since.UTC().Format(time.RFC3339), Fetched: len(ids)}
+	skip := pollcursor.NewSkipSet(req.SkipMessageIDs)
+	resp := model.OAuthPollPageResponse{NewSince: pollcursor.FormatStored(since), Fetched: len(ids)}
 	maxCursor := since.UTC()
+	skippedKnown := 0
 	for _, id := range ids {
+		if skip.Has(id) {
+			skippedKnown++
+			continue
+		}
 		raw, err := client.GetRawMessage(ctx, id)
 		if err != nil {
 			logger.Warn("oauth/poll-page: gmail fetch %s: %v", id, err)
@@ -212,19 +219,20 @@ func pollGoogleOAuthPage(ctx context.Context, req model.OAuthPollPageRequest, si
 		}
 		resp.Messages = append(resp.Messages, model.OAuthPolledMessage{
 			ProviderMessageID: id,
-			CursorTime:        cursor.UTC().Format(time.RFC3339),
-			Parsed:            parsed,
+			CursorTime:        pollcursor.FormatStored(cursor.UTC()),
+			Parsed:            parser.ForPollTransport(parsed),
 		})
 	}
-	if maxCursor.After(since) {
-		resp.NewSince = maxCursor.Format(time.RFC3339)
-	}
+	resp.NewSince = pollcursor.FormatStored(pollcursor.ResolveNewSince(since, maxCursor, len(ids), skippedKnown))
 	return resp, nil
 }
 
 func ingestOAuthGraphMessages(ctx context.Context, req model.OAuthPollPageRequest, msgs []graphmail.Message) (model.OAuthPollPageResponse, error) {
+	since, _ := pollcursor.ParseStored(req.Since)
+	skip := pollcursor.NewSkipSet(req.SkipMessageIDs)
 	resp := model.OAuthPollPageResponse{NewSince: req.Since, Fetched: len(msgs)}
-	maxCursor, _ := time.Parse(time.RFC3339, req.Since)
+	maxCursor := since.UTC()
+	skippedKnown := 0
 	client := graphmail.NewDelegatedClient(req.AccessToken)
 	for _, gm := range msgs {
 		ts := gm.CursorTime(req.SentFolder)
@@ -232,6 +240,10 @@ func ingestOAuthGraphMessages(ctx context.Context, req model.OAuthPollPageReques
 			maxCursor = ts
 		}
 		if gm.ID == "" {
+			continue
+		}
+		if skip.Has(gm.ID) {
+			skippedKnown++
 			continue
 		}
 		raw, err := client.GetMessageMIME(ctx, gm.ID)
@@ -251,13 +263,11 @@ func ingestOAuthGraphMessages(ctx context.Context, req model.OAuthPollPageReques
 		}
 		resp.Messages = append(resp.Messages, model.OAuthPolledMessage{
 			ProviderMessageID: gm.ID,
-			CursorTime:        ts.UTC().Format(time.RFC3339),
-			Parsed:            parsed,
+			CursorTime:        pollcursor.FormatStored(ts.UTC()),
+			Parsed:            parser.ForPollTransport(parsed),
 		})
 	}
-	if maxCursor.After(mustParseRFC3339(req.Since)) {
-		resp.NewSince = maxCursor.Format(time.RFC3339)
-	}
+	resp.NewSince = pollcursor.FormatStored(pollcursor.ResolveNewSince(since, maxCursor, len(msgs), skippedKnown))
 	return resp, nil
 }
 

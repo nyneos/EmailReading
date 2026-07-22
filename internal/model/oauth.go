@@ -44,16 +44,17 @@ type OAuthTestRequest struct {
 
 // OAuthPollPageRequest fetches one page of mailbox messages with a delegated token.
 type OAuthPollPageRequest struct {
-	ServiceKey     string     `json:"service_key"`
-	Provider       string     `json:"provider"`
-	Transport      string     `json:"transport"` // api | imap
-	MailboxAddress string     `json:"mailbox_address"`
-	InboxID        string     `json:"inbox_id"`
-	SentFolder     bool       `json:"sent_folder"`
-	Since          string     `json:"since"` // RFC3339
-	Batch          int        `json:"batch"`
-	AccessToken    string     `json:"access_token"`
-	IMAP           IMAPConfig `json:"imap"`
+	ServiceKey       string     `json:"service_key"`
+	Provider         string     `json:"provider"`
+	Transport        string     `json:"transport"` // api | imap
+	MailboxAddress   string     `json:"mailbox_address"`
+	InboxID          string     `json:"inbox_id"`
+	SentFolder       bool       `json:"sent_folder"`
+	Since            string     `json:"since"` // RFC3339 / RFC3339Nano
+	Batch            int        `json:"batch"`
+	SkipMessageIDs   []string   `json:"skip_message_ids,omitempty"`
+	AccessToken      string     `json:"access_token"`
+	IMAP             IMAPConfig `json:"imap"`
 }
 
 // OAuthPollPageResponse mirrors GraphPollPageResponse for OAuth mailboxes.

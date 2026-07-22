@@ -6,12 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"EmailService/internal/model"
 
@@ -110,10 +108,8 @@ func PutObject(ctx context.Context, key string, body []byte, contentType string)
 	return err
 }
 
-func PutParsedJSON(ctx context.Context, parsed model.ParsedEmail) (string, error) {
-	now := time.Now().UTC()
-	key := fmt.Sprintf("%s%04d/%02d/%02d/%s.json",
-		parsedPrefix(), now.Year(), now.Month(), now.Day(), parsed.MessageID)
+func PutParsedJSON(ctx context.Context, storageID string, parsed model.ParsedEmail) (string, error) {
+	key := strings.TrimSuffix(parsedPrefix(), "/") + "/" + storageID + ".json"
 	b, err := json.MarshalIndent(parsed, "", "  ")
 	if err != nil {
 		return "", err
@@ -124,20 +120,29 @@ func PutParsedJSON(ctx context.Context, parsed model.ParsedEmail) (string, error
 	return key, nil
 }
 
-func PutAttachment(ctx context.Context, messageID, filename string, data []byte, contentType string) (string, string, error) {
-	now := time.Now().UTC()
+func attachmentObjectKey(attachPrefix, storageID, filename string, content []byte) string {
 	safeName := filepath.Base(strings.TrimSpace(filename))
 	if safeName == "" || safeName == "." {
 		safeName = "attachment"
 	}
+	hash := sha256.Sum256(content)
+	hashHex := hex.EncodeToString(hash[:])
+	return strings.TrimSuffix(attachPrefix, "/") + "/" + storageID + "/" + hashHex[:16] + "_" + safeName
+}
+
+// PutAttachmentStable stores attachment bytes at a deterministic key (overwrite-safe).
+func PutAttachmentStable(ctx context.Context, storageID, filename string, data []byte, contentType string) (string, string, error) {
+	key := attachmentObjectKey(attachPrefix(), storageID, filename, data)
 	hash := sha256.Sum256(data)
 	hashHex := hex.EncodeToString(hash[:])
-	key := fmt.Sprintf("%s%04d/%02d/%02d/%s/%s",
-		attachPrefix(), now.Year(), now.Month(), now.Day(), messageID, safeName)
 	if err := PutObject(ctx, key, data, contentType); err != nil {
 		return "", "", err
 	}
 	return key, hashHex, nil
+}
+
+func PutAttachment(ctx context.Context, messageID, filename string, data []byte, contentType string) (string, string, error) {
+	return PutAttachmentStable(ctx, messageID, filename, data, contentType)
 }
 
 func ListNewRawKeys(ctx context.Context, afterKey string, limit int32) ([]string, error) {

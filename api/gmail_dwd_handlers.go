@@ -11,6 +11,7 @@ import (
 	"EmailService/internal/logger"
 	"EmailService/internal/model"
 	"EmailService/internal/parser"
+	"EmailService/internal/pollcursor"
 	"EmailService/internal/s3store"
 )
 
@@ -75,12 +76,12 @@ func gmailDWDPollPageHandler(w http.ResponseWriter, r *http.Request) {
 	mailbox := strings.TrimSpace(strings.ToLower(req.MailboxAddress))
 	sinceStr := strings.TrimSpace(req.Since)
 	if sinceStr == "" {
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := pollcursor.FormatStored(time.Now().UTC())
 		logger.Info("gmail-dwd/poll-page: init mailbox=%s sent=%v since=%s", mailbox, req.SentFolder, now)
 		writeJSON(w, model.GmailDWDPollPageResponse{Initialized: true, NewSince: now})
 		return
 	}
-	since, err := time.Parse(time.RFC3339, sinceStr)
+	since, err := pollcursor.ParseStored(sinceStr)
 	if err != nil {
 		jsonErr(w, "invalid since timestamp", http.StatusBadRequest)
 		return
@@ -97,9 +98,15 @@ func gmailDWDPollPageHandler(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	skip := pollcursor.NewSkipSet(req.SkipMessageIDs)
 	resp := model.GmailDWDPollPageResponse{NewSince: sinceStr, Fetched: len(ids)}
 	maxCursor := since.UTC()
+	skippedKnown := 0
 	for _, id := range ids {
+		if skip.Has(id) {
+			skippedKnown++
+			continue
+		}
 		rawMsg, err := client.GetRawMessage(r.Context(), id)
 		if err != nil {
 			logger.Warn("gmail-dwd/poll-page: fetch raw %s: %v", id, err)
@@ -118,17 +125,19 @@ func gmailDWDPollPageHandler(w http.ResponseWriter, r *http.Request) {
 			logger.Warn("gmail-dwd/poll-page: parse %s: %v", rawKey, err)
 			continue
 		}
-		cursor := rawMsg.InternalDate.UTC().Format(time.RFC3339)
+		cursor := rawMsg.InternalDate.UTC()
+		if cursor.IsZero() {
+			cursor = maxCursor
+		}
 		resp.Messages = append(resp.Messages, model.GmailDWDPolledMessage{
 			GraphMessageID: id,
-			CursorTime:     cursor,
-			Parsed:         parsed,
+			CursorTime:     pollcursor.FormatStored(cursor),
+			Parsed:         parser.ForPollTransport(parsed),
 		})
 	}
-	if maxCursor.After(since) {
-		resp.NewSince = maxCursor.UTC().Format(time.RFC3339)
-	}
-	logger.Info("gmail-dwd/poll-page: mailbox=%s sent=%v messages=%d new_since=%s", mailbox, req.SentFolder, len(resp.Messages), resp.NewSince)
+	resp.NewSince = pollcursor.FormatStored(pollcursor.ResolveNewSince(since, maxCursor, len(ids), skippedKnown))
+	logger.Info("gmail-dwd/poll-page: mailbox=%s sent=%v fetched=%d messages=%d skipped_known=%d new_since=%s",
+		mailbox, req.SentFolder, resp.Fetched, len(resp.Messages), skippedKnown, resp.NewSince)
 	writeJSON(w, resp)
 }
 

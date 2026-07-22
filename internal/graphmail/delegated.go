@@ -74,7 +74,7 @@ func (c *DelegatedClient) listFolderSince(ctx context.Context, folder, dateField
 		top = 50
 	}
 	q := url.Values{}
-	q.Set("$filter", fmt.Sprintf("%s gt %s", dateField, since.UTC().Format("2006-01-02T15:04:05Z")))
+	q.Set("$filter", fmt.Sprintf("%s gt %s", dateField, since.UTC().Format("2006-01-02T15:04:05.000Z")))
 	q.Set("$orderby", dateField+" asc")
 	q.Set("$top", strconv.Itoa(top))
 	q.Set("$select", "id,subject,receivedDateTime,sentDateTime,internetMessageId,from,toRecipients,hasAttachments")

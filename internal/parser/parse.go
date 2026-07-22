@@ -35,7 +35,7 @@ func ParseRaw(ctx context.Context, s3RawKey string, raw []byte) (model.ParsedEma
 		return model.ParsedEmail{}, fmt.Errorf("parse mime: %w", err)
 	}
 
-	msgID := newMessageID()
+	msgID := StorageIDFromRawKey(s3RawKey)
 	envelope := model.Envelope{
 		From:            firstAddr(env.GetHeader("From")),
 		To:              splitAddrs(env.GetHeader("To")),
@@ -70,7 +70,7 @@ func ParseRaw(ctx context.Context, s3RawKey string, raw []byte) (model.ParsedEma
 		if ct == "" {
 			ct = "application/octet-stream"
 		}
-		s3Key, hash, err := s3store.PutAttachment(ctx, msgID, filename, part.Content, ct)
+		s3Key, hash, err := s3store.PutAttachmentStable(ctx, msgID, filename, part.Content, ct)
 		if err != nil {
 			return model.ParsedEmail{}, fmt.Errorf("upload attachment: %w", err)
 		}
@@ -98,7 +98,7 @@ func ParseRaw(ctx context.Context, s3RawKey string, raw []byte) (model.ParsedEma
 		Status:   "PARSED",
 	}
 
-	parsedKey, err := s3store.PutParsedJSON(ctx, parsed)
+	parsedKey, err := s3store.PutParsedJSON(ctx, msgID, parsed)
 	if err != nil {
 		return model.ParsedEmail{}, fmt.Errorf("write parsed json: %w", err)
 	}

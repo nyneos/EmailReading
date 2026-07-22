@@ -2,14 +2,15 @@ package model
 
 // IMAPPollFolderRequest — CIMPLR sends mailbox creds; service fetches, uploads S3, parses.
 type IMAPPollFolderRequest struct {
-	ServiceKey     string     `json:"service_key"`
-	MailboxAddress string     `json:"mailbox_address"`
-	InboxID        string     `json:"inbox_id"`
-	Folder         string     `json:"folder"`
-	Direction      string     `json:"direction"` // RECEIVED | SENT
-	LastUID        uint32     `json:"last_uid"`
-	Batch          int        `json:"batch"`
-	IMAP           IMAPConfig `json:"imap"`
+	ServiceKey          string     `json:"service_key"`
+	MailboxAddress      string     `json:"mailbox_address"`
+	InboxID             string     `json:"inbox_id"`
+	Folder              string     `json:"folder"`
+	Direction           string     `json:"direction"` // RECEIVED | SENT
+	LastUID             uint32     `json:"last_uid"`
+	Batch               int        `json:"batch"`
+	SkipIMAPMessageKeys []string   `json:"skip_imap_message_keys,omitempty"`
+	IMAP                IMAPConfig `json:"imap"`
 }
 
 type IMAPConfig struct {
@@ -38,13 +39,14 @@ type IMAPPolledMessage struct {
 }
 
 type GraphPollPageRequest struct {
-	ServiceKey     string      `json:"service_key"`
-	MailboxAddress string      `json:"mailbox_address"`
-	InboxID        string      `json:"inbox_id"`
-	SentFolder     bool        `json:"sent_folder"`
-	Since          string      `json:"since"` // RFC3339
-	Batch          int         `json:"batch"`
-	Graph          GraphConfig `json:"graph"`
+	ServiceKey       string      `json:"service_key"`
+	MailboxAddress   string      `json:"mailbox_address"`
+	InboxID          string      `json:"inbox_id"`
+	SentFolder       bool        `json:"sent_folder"`
+	Since            string      `json:"since"` // RFC3339 / RFC3339Nano
+	Batch            int         `json:"batch"`
+	SkipMessageIDs   []string    `json:"skip_message_ids,omitempty"`
+	Graph            GraphConfig `json:"graph"`
 }
 
 type GraphConfig struct {
@@ -92,13 +94,14 @@ type GmailDWDTestRequest struct {
 }
 
 type GmailDWDPollPageRequest struct {
-	ServiceKey     string         `json:"service_key"`
-	MailboxAddress string         `json:"mailbox_address"`
-	InboxID        string         `json:"inbox_id"`
-	SentFolder     bool           `json:"sent_folder"`
-	Since          string         `json:"since"`
-	Batch          int            `json:"batch"`
-	GmailDWD       GmailDWDConfig `json:"gmail_dwd"`
+	ServiceKey       string         `json:"service_key"`
+	MailboxAddress   string         `json:"mailbox_address"`
+	InboxID          string         `json:"inbox_id"`
+	SentFolder       bool           `json:"sent_folder"`
+	Since            string         `json:"since"`
+	Batch            int            `json:"batch"`
+	SkipMessageIDs   []string       `json:"skip_message_ids,omitempty"`
+	GmailDWD         GmailDWDConfig `json:"gmail_dwd"`
 }
 
 type GmailDWDPollPageResponse struct {

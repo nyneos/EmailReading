@@ -14,6 +14,7 @@ import (
 	"EmailService/internal/logger"
 	"EmailService/internal/model"
 	"EmailService/internal/parser"
+	"EmailService/internal/pollcursor"
 	"EmailService/internal/s3store"
 )
 
@@ -96,11 +97,17 @@ func imapPollFolderHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := model.IMAPPollFolderResponse{NewLastUID: lastUID}
+	skip := pollcursor.NewSkipSet(req.SkipIMAPMessageKeys)
+	skippedKnown := 0
 	for _, im := range messages {
 		if im.UID > resp.NewLastUID {
 			resp.NewLastUID = im.UID
 		}
 		imapKey := fmt.Sprintf("%s:%s:%d", req.InboxID, folder, im.UID)
+		if skip.Has(imapKey) {
+			skippedKnown++
+			continue
+		}
 		rawKey := imapRawS3Key(req.MailboxAddress, req.Direction, imapKey)
 		if err := s3store.PutObject(r.Context(), rawKey, im.Raw, "message/rfc822"); err != nil {
 			logger.Warn("imap/poll-folder: s3 upload %s: %v", rawKey, err)
@@ -114,10 +121,11 @@ func imapPollFolderHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Messages = append(resp.Messages, model.IMAPPolledMessage{
 			UID:            im.UID,
 			IMAPMessageKey: imapKey,
-			Parsed:         parsed,
+			Parsed:         parser.ForPollTransport(parsed),
 		})
 	}
-	logger.Info("imap/poll-folder: mailbox=%s folder=%s messages=%d new_uid=%d", req.MailboxAddress, folder, len(resp.Messages), resp.NewLastUID)
+	logger.Info("imap/poll-folder: mailbox=%s folder=%s messages=%d skipped_known=%d new_uid=%d",
+		req.MailboxAddress, folder, len(resp.Messages), skippedKnown, resp.NewLastUID)
 	writeJSON(w, resp)
 }
 
@@ -157,12 +165,12 @@ func graphPollPageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	sinceStr := strings.TrimSpace(req.Since)
 	if sinceStr == "" {
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := pollcursor.FormatStored(time.Now().UTC())
 		logger.Info("graph/poll-page: init mailbox=%s sent=%v since=%s", req.MailboxAddress, req.SentFolder, now)
 		writeJSON(w, model.GraphPollPageResponse{Initialized: true, NewSince: now})
 		return
 	}
-	since, err := time.Parse(time.RFC3339, sinceStr)
+	since, err := pollcursor.ParseStored(sinceStr)
 	if err != nil {
 		jsonErr(w, "invalid since timestamp", http.StatusBadRequest)
 		return
@@ -186,14 +194,20 @@ func graphPollPageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	skip := pollcursor.NewSkipSet(req.SkipMessageIDs)
 	resp := model.GraphPollPageResponse{NewSince: sinceStr, Fetched: len(graphMessages)}
 	maxCursor := since.UTC()
+	skippedKnown := 0
 	for _, gm := range graphMessages {
 		ts := gm.CursorTime(req.SentFolder)
 		if !ts.IsZero() && ts.After(maxCursor) {
 			maxCursor = ts
 		}
 		if gm.ID == "" {
+			continue
+		}
+		if skip.Has(gm.ID) {
+			skippedKnown++
 			continue
 		}
 		raw, err := graphClient.GetMessageMIME(r.Context(), req.MailboxAddress, gm.ID)
@@ -213,14 +227,13 @@ func graphPollPageHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		resp.Messages = append(resp.Messages, model.GraphPolledMessage{
 			GraphMessageID: gm.ID,
-			CursorTime:     ts.UTC().Format(time.RFC3339),
-			Parsed:         parsed,
+			CursorTime:     pollcursor.FormatStored(ts.UTC()),
+			Parsed:         parser.ForPollTransport(parsed),
 		})
 	}
-	if maxCursor.After(since) {
-		resp.NewSince = maxCursor.Format(time.RFC3339)
-	}
-	logger.Info("graph/poll-page: mailbox=%s sent=%v fetched=%d messages=%d since=%s", req.MailboxAddress, req.SentFolder, resp.Fetched, len(resp.Messages), resp.NewSince)
+	resp.NewSince = pollcursor.FormatStored(pollcursor.ResolveNewSince(since, maxCursor, len(graphMessages), skippedKnown))
+	logger.Info("graph/poll-page: mailbox=%s sent=%v fetched=%d messages=%d skipped_known=%d since=%s new_since=%s",
+		req.MailboxAddress, req.SentFolder, resp.Fetched, len(resp.Messages), skippedKnown, sinceStr, resp.NewSince)
 	writeJSON(w, resp)
 }
 
